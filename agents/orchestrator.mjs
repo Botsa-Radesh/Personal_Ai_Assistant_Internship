@@ -1,7 +1,8 @@
 import { parseIntent } from "../lib/gemini-client.mjs";
 import { searchEmails, summarizeTodaysEmails, getImportantEmails, extractActionItems } from "./email-agent.mjs";
-import { crossSourceSearch, prepareMeetingBrief } from "./memory-agent.mjs";
+import { crossSourceSearch, prepareMeetingBrief as memoryMeetingBrief } from "./memory-agent.mjs";
 import { getDailyReport } from "./summary-agent.mjs";
+import { getTodaysMeetings, getUpcomingMeetings, prepareMeetingBrief } from "./calendar-agent.mjs";
 
 /**
  * GStack Orchestrator - Routes requests to the appropriate specialized agent
@@ -38,6 +39,12 @@ export async function processCommand(message) {
       case "meeting_prep":
         return await prepareMeetingBrief(query);
 
+      case "todays_meetings":
+        return await getTodaysMeetings();
+
+      case "upcoming_meetings":
+        return await getUpcomingMeetings();
+
       case "search_teams":
         return await crossSourceSearch(`teams meeting ${query}`);
 
@@ -55,6 +62,7 @@ export async function processCommand(message) {
           `• **Important emails** - "show important emails"\n` +
           `• **Action items** - "show pending action items"\n` +
           `• **Daily report** - "give me my daily report"\n` +
+          `• **Today's meetings** - "what meetings do I have today"\n` +
           `• **Meeting prep** - "prepare me for [meeting topic]"\n` +
           `• **General search** - "what do I know about [topic]"`;
     }

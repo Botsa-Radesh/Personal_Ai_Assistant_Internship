@@ -91,9 +91,8 @@ client.on("messageCreate", async (message) => {
         return;
       }
 
-      await message.reply("🎤 Transcribing your voice message...");
-
       try {
+        await message.channel.sendTyping();
         const audioBuffer = await downloadAttachment(voiceAttachment.url);
         const { text, confidence } = await transcribeAudio(audioBuffer, voiceAttachment.contentType);
 
@@ -102,9 +101,7 @@ client.on("messageCreate", async (message) => {
           return;
         }
 
-        // Use transcribed text as the command
         userMessage = text;
-        await message.reply(`🎤 Heard: "${text}"\n\nProcessing...`);
       } catch (err) {
         console.error("Voice transcription error:", err);
         await message.reply("⚠️ Voice transcription unavailable. Please type your command instead.");

@@ -67,16 +67,51 @@ async function getEmailDetails(messageId) {
   const details = await gmail.users.messages.get({
     userId: "me",
     id: messageId,
+    format: "full",
   });
 
   const headers = details.data.payload.headers || [];
+
+  // Extract body
+  const body = extractBody(details.data.payload);
+  const truncatedBody = body.length > 5000 ? body.substring(0, 5000) + "\n\n[...truncated]" : body;
+
   return {
     id: messageId,
     from: headers.find((h) => h.name === "From")?.value || "",
+    to: headers.find((h) => h.name === "To")?.value || "",
     subject: headers.find((h) => h.name === "Subject")?.value || "",
     date: headers.find((h) => h.name === "Date")?.value || "",
     snippet: details.data.snippet || "",
+    body: truncatedBody,
   };
+}
+
+/**
+ * Extract plain text body from Gmail payload.
+ */
+function extractBody(payload) {
+  if (payload.body?.data) {
+    return Buffer.from(payload.body.data, "base64url").toString("utf8");
+  }
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      if (part.mimeType === "text/plain" && part.body?.data) {
+        return Buffer.from(part.body.data, "base64url").toString("utf8");
+      }
+      if (part.parts) {
+        const nested = extractBody(part);
+        if (nested) return nested;
+      }
+    }
+    for (const part of payload.parts) {
+      if (part.mimeType === "text/html" && part.body?.data) {
+        const html = Buffer.from(part.body.data, "base64url").toString("utf8");
+        return html.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      }
+    }
+  }
+  return "";
 }
 
 function emailMemoryPath(messageId) {
@@ -91,12 +126,13 @@ function storeEmailToMemory(email) {
   const content = `# Email: ${email.subject}
 
 **From:** ${email.from}
+**To:** ${email.to || ""}
 **Date:** ${email.date}
 **Subject:** ${email.subject}
 
 ## Content
 
-${email.snippet}
+${email.body || email.snippet}
 
 ---
 _Source: Gmail | ID: ${email.id}_

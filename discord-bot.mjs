@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Partials } from "discord.js";
 import { config } from "./config.mjs";
 import { processCommand } from "./agents/orchestrator.mjs";
 import { getVoiceAttachment, downloadAttachment, transcribeAudio } from "./lib/voice-handler.mjs";
+import { processMeetingBuffer } from "./agents/meeting-processor.mjs";
 
 const client = new Client({
   intents: [
@@ -85,7 +86,47 @@ client.on("messageCreate", async (message) => {
     // Check for voice message attachment
     const voiceAttachment = getVoiceAttachment(message);
     if (voiceAttachment) {
-      // Handle voice message
+      // If message text contains "meeting" or file is >60s, process as meeting recording
+      const isMeetingUpload = 
+        userMessage.toLowerCase().includes("meeting") ||
+        userMessage.toLowerCase().includes("recording") ||
+        userMessage.toLowerCase().includes("transcript") ||
+        (voiceAttachment.duration && voiceAttachment.duration > 60000);
+
+      if (isMeetingUpload) {
+        await message.reply("🎤 Processing meeting recording... This may take a minute.");
+        try {
+          const audioBuffer = await downloadAttachment(voiceAttachment.url);
+          const metadata = {
+            title: userMessage || "Discord Meeting Upload",
+            participants: "",
+            platform: "Uploaded via Discord",
+            date: new Date().toISOString(),
+          };
+          const result = await processMeetingBuffer(audioBuffer, voiceAttachment.contentType, metadata);
+
+          let reply = `✅ **Meeting Processed**\n\n`;
+          reply += `**Summary:** ${result.analysis.summary}\n\n`;
+          if (result.analysis.actionItems?.length > 0) {
+            reply += `**Action Items:**\n${result.analysis.actionItems.map((a, i) => `${i + 1}. ${a}`).join("\n")}\n\n`;
+          }
+          if (result.analysis.decisions?.length > 0) {
+            reply += `**Decisions:**\n${result.analysis.decisions.map((d, i) => `${i + 1}. ${d}`).join("\n")}\n\n`;
+          }
+          reply += `_Stored in memory for future meeting preparation._`;
+
+          const chunks = splitMessage(reply);
+          for (const chunk of chunks) {
+            await message.reply(chunk);
+          }
+        } catch (err) {
+          console.error("Meeting processing error:", err);
+          await message.reply("⚠️ Failed to process meeting recording. Please try again.");
+        }
+        return;
+      }
+
+      // Handle as short voice command
       if (voiceAttachment.duration && voiceAttachment.duration > 60000) {
         await message.reply("⚠️ Voice message too long (max 60 seconds). Please send a shorter message or type your command.");
         return;

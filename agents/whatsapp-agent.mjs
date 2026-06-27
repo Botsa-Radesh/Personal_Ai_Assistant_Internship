@@ -1,4 +1,4 @@
-import { queryGBrain, storeDocument } from "../lib/gbrain-client.mjs";
+import { queryGBrain, storeDocument, parseGbrainResults } from "../lib/gbrain-client.mjs";
 import { generateResponse } from "../lib/gemini-client.mjs";
 import { sendWhatsAppMessage } from "../lib/whatsapp-client.mjs";
 
@@ -36,23 +36,20 @@ _Source: WhatsApp | ID: ${message.id}_
  * @returns {Promise<string>}
  */
 export async function searchWhatsAppMessages(query) {
-  const rawResults = queryGBrain(`whatsapp ${query}`);
+  const rawResults = queryGBrain(query);
 
   if (!rawResults || rawResults.trim().length === 0) {
     return "No WhatsApp messages found matching your query.";
   }
 
-  // Filter to only WhatsApp results
-  const lines = rawResults.split("\n");
-  const whatsappLines = lines.filter(
-    (line) => line.toLowerCase().includes("whatsapp")
-  );
+  const allMatches = parseGbrainResults(rawResults);
+  const whatsappMatches = allMatches.filter((m) => m.slug.startsWith("whatsapp-"));
 
-  if (whatsappLines.length === 0) {
-    return "No WhatsApp messages found. Only email results available for this query.";
+  if (whatsappMatches.length === 0) {
+    return "No WhatsApp messages found matching your query.";
   }
 
-  return whatsappLines.slice(0, 10).join("\n");
+  return formatWhatsAppSearchResults(whatsappMatches);
 }
 
 /**
@@ -68,16 +65,45 @@ export async function summarizeWhatsAppChat(chatName = "") {
     return "No WhatsApp messages found to summarize.";
   }
 
+  const allMatches = parseGbrainResults(rawResults);
+  const whatsappMatches = allMatches.filter((m) => m.slug.startsWith("whatsapp-"));
+
+  if (whatsappMatches.length === 0) {
+    return "No WhatsApp messages found to summarize.";
+  }
+
+  const filteredRaw = whatsappMatches.map(m => `${m.header}\n${m.bodyLines.join("\n")}`).join("\n\n");
+
   const prompt = `Summarize the following WhatsApp messages concisely. Group by sender/topic if possible. Highlight any action items or important information.
 
 Messages:
-${rawResults}`;
+${filteredRaw}`;
 
   try {
     return await generateResponse(prompt);
   } catch {
-    return rawResults;
+    return "Summarization is temporarily unavailable. Here are the raw messages:\n\n" + formatWhatsAppSearchResults(whatsappMatches);
   }
+}
+
+/**
+ * Format raw GBrain WhatsApp search results.
+ */
+function formatWhatsAppSearchResults(matches) {
+  return matches.slice(0, 5).map((m, i) => {
+    const fromLine = m.bodyLines.find(l => l.startsWith("From:")) || "";
+    const dateLine = m.bodyLines.find(l => l.startsWith("Date:")) || "";
+    
+    const textLines = m.bodyLines
+      .filter(l => !l.startsWith("From:") && !l.startsWith("Date:") && !l.startsWith("Type:") && !l.startsWith("---") && !l.includes("_Source:") && l.trim().length > 0)
+      .join("\n");
+
+    let result = `📱 **WhatsApp Message ${i + 1}**\n`;
+    if (fromLine) result += `• **${fromLine}**\n`;
+    if (dateLine) result += `• **${dateLine}**\n`;
+    if (textLines) result += `• **Content:**\n${textLines.trim()}`;
+    return result;
+  }).join("\n\n");
 }
 
 /**
@@ -89,8 +115,21 @@ export async function processIncomingMessage(message) {
   // Store the message in GBrain
   storeWhatsAppMessage(message);
 
+  const cleanText = message.text.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "");
+  
+  const greetings = ["hi", "hello", "hey", "yo", "greetings", "good morning", "good afternoon", "good evening"];
+  const acknowledgements = ["ok", "okay", "thanks", "thank you", "cool", "got it", "fine"];
+  
+  if (greetings.includes(cleanText)) {
+    return "Hello! How can I help you today? 🤖";
+  }
+  
+  if (acknowledgements.includes(cleanText)) {
+    return "You're welcome! Let me know if you need anything else. 👍";
+  }
+
   // If the message looks like a command/question, generate a response
-  const text = message.text.toLowerCase();
+  const text = message.text.toLowerCase().trim();
   const isQuery = text.includes("?") ||
     text.startsWith("search") ||
     text.startsWith("find") ||
@@ -103,10 +142,10 @@ export async function processIncomingMessage(message) {
     const results = queryGBrain(message.text);
     if (results && results.trim().length > 0) {
       const prompt = `Based on the following information from my knowledge base, answer this question concisely: "${message.text}"
-
+ 
 Information:
 ${results}`;
-
+ 
       try {
         return await generateResponse(prompt);
       } catch (err) {

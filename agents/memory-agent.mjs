@@ -35,7 +35,14 @@ User query/message: "${query}"`;
   try {
     return await generateResponse(prompt);
   } catch (err) {
-    return rawResults || "I tried to search my memory but encountered an error. Please try again.";
+    console.error("Gemini response generation failed:", err.message);
+    if (err.message?.includes("quota") || err.message?.includes("429") || err.message?.includes("limit")) {
+      return "⚠️ The assistant is currently experiencing rate limits or quota issues with the Gemini API. Please try again in a moment or check your API key.";
+    }
+    if (rawResults && rawResults.trim().length > 0 && query.trim().length > 3) {
+      return `⚠️ I encountered an error generating a natural response, but here is what I found in your database:\n\n${rawResults}`;
+    }
+    return "I tried to search my memory but encountered an error. Please try again.";
   }
 }
 

@@ -27,6 +27,19 @@ import { prepareForMeeting, getStoredMeetings } from "./meeting-processor.mjs";
  *   general_query       → Memory Agent (cross-source GBrain search)
  */
 export async function processCommand(message) {
+  const cleanMsg = message.toLowerCase().trim().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?]/g, "");
+  
+  const greetings = ["hi", "hello", "hey", "yo", "greetings", "good morning", "good afternoon", "good evening"];
+  const acknowledgements = ["ok", "okay", "thanks", "thank you", "cool", "got it", "fine"];
+  
+  if (greetings.includes(cleanMsg)) {
+    return "Hello! How can I help you today? 🤖";
+  }
+  
+  if (acknowledgements.includes(cleanMsg)) {
+    return "You're welcome! Let me know if you need anything else. 👍";
+  }
+
   try {
     // Step 1: Parse intent
     const { intent, query, sender } = await parseIntent(message);

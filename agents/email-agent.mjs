@@ -1,9 +1,24 @@
-import { queryGBrain } from "../lib/gbrain-client.mjs";
+import { queryGBrain, parseGbrainResults } from "../lib/gbrain-client.mjs";
 import { summarizeEmails } from "../lib/gemini-client.mjs";
 
 /**
  * Email Agent - Searches email memory, filters relevant emails, extracts action items.
  */
+
+/**
+ * Filter raw GBrain search results to only contain email matches.
+ * @param {string} rawResults
+ * @returns {string} Reconstructed raw result string
+ */
+function filterRawResultsToEmails(rawResults) {
+  if (!rawResults || rawResults.trim().length === 0) return "";
+  const matches = parseGbrainResults(rawResults);
+  const emailMatches = matches.filter((m) => m.slug.startsWith("email-"));
+  
+  return emailMatches.map(m => {
+    return `${m.header}\n${m.bodyLines.join("\n")}`;
+  }).join("\n\n");
+}
 
 /**
  * Search emails by topic using semantic search.
@@ -23,19 +38,27 @@ export async function searchEmails(query, sender = null) {
     return "No relevant emails found. Try broadening your search terms.";
   }
 
+  // Parse all matches into structured blocks
+  const allMatches = parseGbrainResults(rawResults);
+
+  // Filter: ONLY include results that are emails (slug starts with 'email-')
+  let emailMatches = allMatches.filter((m) => m.slug.startsWith("email-"));
+
   // Filter by sender if specified
   if (sender) {
-    const lines = rawResults.split("\n");
-    const filtered = lines.filter(
-      (line) => line.toLowerCase().includes(sender.toLowerCase())
-    );
-    if (filtered.length === 0) {
-      return `No emails found from "${sender}". Try a different sender name.`;
-    }
-    return formatSearchResults(filtered.join("\n"));
+    emailMatches = emailMatches.filter((m) => {
+      const fromLine = m.bodyLines.find(l => l.toLowerCase().startsWith("from:"));
+      return fromLine && fromLine.toLowerCase().includes(sender.toLowerCase());
+    });
   }
 
-  return formatSearchResults(rawResults);
+  if (emailMatches.length === 0) {
+    return sender 
+      ? `No emails found from "${sender}" matching your search.`
+      : "No relevant emails found matching your search.";
+  }
+
+  return formatEmailSearchResults(emailMatches);
 }
 
 /**
@@ -43,15 +66,16 @@ export async function searchEmails(query, sender = null) {
  * @returns {Promise<string>} Summarized emails
  */
 export async function summarizeTodaysEmails() {
-  // Search for recent emails — GBrain uses keyword search not date filter
+  // Search for recent emails
   const rawResults = queryGBrain("email subject from");
+  const filtered = filterRawResultsToEmails(rawResults);
 
-  if (!rawResults || rawResults.trim().length === 0) {
+  if (!filtered || filtered.trim().length === 0) {
     return "No emails found in memory. Make sure the ingestion pipeline has run.";
   }
 
   try {
-    const summary = await summarizeEmails(rawResults, "daily");
+    const summary = await summarizeEmails(filtered, "daily");
     return summary;
   } catch (err) {
     return "Summarization is temporarily unavailable. Please try again.";
@@ -64,13 +88,14 @@ export async function summarizeTodaysEmails() {
  */
 export async function getImportantEmails() {
   const rawResults = queryGBrain("urgent important deadline ASAP security alert action required");
+  const filtered = filterRawResultsToEmails(rawResults);
 
-  if (!rawResults || rawResults.trim().length === 0) {
+  if (!filtered || filtered.trim().length === 0) {
     return "No important emails found in recent messages.";
   }
 
   try {
-    const summary = await summarizeEmails(rawResults, "important");
+    const summary = await summarizeEmails(filtered, "important");
     return summary;
   } catch (err) {
     return "Summarization is temporarily unavailable. Please try again.";
@@ -83,13 +108,14 @@ export async function getImportantEmails() {
  */
 export async function extractActionItems() {
   const rawResults = queryGBrain("action required please do deadline follow up task");
+  const filtered = filterRawResultsToEmails(rawResults);
 
-  if (!rawResults || rawResults.trim().length === 0) {
+  if (!filtered || filtered.trim().length === 0) {
     return "No pending action items detected in recent emails. Try expanding your search range.";
   }
 
   try {
-    const summary = await summarizeEmails(rawResults, "action_items");
+    const summary = await summarizeEmails(filtered, "action_items");
     return summary;
   } catch (err) {
     return "Action item extraction is temporarily unavailable. Please try again.";
@@ -99,16 +125,27 @@ export async function extractActionItems() {
 /**
  * Format raw GBrain results into a readable format.
  */
-function formatSearchResults(raw) {
-  const lines = raw.split("\n").filter((l) => l.trim().length > 0);
+function formatEmailSearchResults(matches) {
+  return matches.slice(0, 5).map((m, i) => {
+    // Subject header is after " -- "
+    const subjectHeader = m.header.split(" -- ")[1] || "";
+    const subject = subjectHeader.replace("# Email: ", "").replace("# Email:", "").trim();
+    
+    const fromLine = m.bodyLines.find(l => l.startsWith("From:")) || "";
+    const dateLine = m.bodyLines.find(l => l.startsWith("Date:")) || "";
+    
+    // Extract snippet: skip metadata headers and join non-empty lines
+    const snippet = m.bodyLines
+      .filter(l => !l.startsWith("From:") && !l.startsWith("To:") && !l.startsWith("Subject:") && !l.startsWith("Date:") && l.trim().length > 0)
+      .join(" ")
+      .substring(0, 150)
+      .trim();
 
-  if (lines.length === 0) return "No results found.";
-
-  // Limit snippet length to 150 chars
-  const formatted = lines.slice(0, 10).map((line, i) => {
-    const truncated = line.length > 150 ? line.substring(0, 147) + "..." : line;
-    return `${i + 1}. ${truncated}`;
-  });
-
-  return formatted.join("\n");
+    let result = `✉️ **Email ${i + 1}**\n`;
+    result += `• **Subject:** ${subject || "(No Subject)"}\n`;
+    if (fromLine) result += `• **${fromLine}**\n`;
+    if (dateLine) result += `• **${dateLine}**\n`;
+    if (snippet) result += `• **Snippet:** ${snippet}...`;
+    return result;
+  }).join("\n\n");
 }

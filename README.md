@@ -8,7 +8,7 @@
 An intelligent, multi-agent workplace productivity assistant powered by **Gemini 1.5 Flash** and integrated with **OpenClaw Gateway**, **GBrain (PGLite)**, **Discord**, and **WhatsApp**. This assistant acts as a cognitive extension, automatically fetching emails, summarizing meetings, organizing calendar events, tracking tasks, and providing conversational intelligence directly in your chat apps.
 
 ---
-
+hi
 ## 🏗️ Architecture & Data Flow
 
 The project is built on **GStack** (an orchestrator that uses Gemini to route intents) and integrates with **GBrain** (a local vector database and knowledge base backed by PGLite).

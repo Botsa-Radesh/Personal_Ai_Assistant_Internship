@@ -21,9 +21,12 @@ RUN git clone https://github.com/garrytan/gbrain.git
 WORKDIR /usr/src/gbrain
 RUN bun install
 
-# Set up global and local compatibility shell wrappers to run gbrain from the physical path (bypassing Bun VFS bugs)
+# Install tsx globally to run gbrain TypeScript CLI under Node.js (bypasses Bun's WASM container bugs)
+RUN npm install -g tsx
+
+# Set up global and local compatibility shell wrappers to run gbrain from the physical path via Node.js tsx
 RUN mkdir -p /root/.bun/bin /home/radesh/.bun/bin
-RUN echo '#!/bin/sh\nexec bun /usr/src/gbrain/src/cli.ts "$@"' > /root/.bun/bin/gbrain && chmod +x /root/.bun/bin/gbrain
+RUN echo '#!/bin/sh\nexec tsx /usr/src/gbrain/src/cli.ts "$@"' > /root/.bun/bin/gbrain && chmod +x /root/.bun/bin/gbrain
 RUN ln -s /root/.bun/bin/gbrain /home/radesh/.bun/bin/gbrain
 
 # Install OpenClaw globally (standard method)

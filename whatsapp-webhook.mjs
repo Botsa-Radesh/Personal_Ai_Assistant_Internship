@@ -16,7 +16,7 @@ import { processIncomingMessage } from "./agents/whatsapp-agent.mjs";
  *    Verify token: your WHATSAPP_VERIFY_TOKEN value
  */
 
-const PORT = parseInt(process.env.WHATSAPP_WEBHOOK_PORT || "3002", 10);
+const PORT = parseInt(process.env.PORT || process.env.WHATSAPP_WEBHOOK_PORT || "3002", 10);
 const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || "personal_ai_assistant_verify";
 
 function parseBody(req) {
@@ -88,7 +88,7 @@ const server = http.createServer(async (req, res) => {
         console.log(`📱 WhatsApp from ${msg.senderName} (${msg.from}): ${msg.text}`);
 
         // Mark as read
-        await markAsRead(msg.id).catch(() => {});
+        await markAsRead(msg.id).catch(() => { });
 
         console.log("📩 Processing message...");
         const response = await processIncomingMessage(msg);

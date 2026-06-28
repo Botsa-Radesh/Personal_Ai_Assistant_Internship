@@ -1,0 +1,15 @@
+node_modules
+data
+cron.log
+credentials.json
+token.json
+.env
+.git
+.kiro
+Personal_Ai_Assistant
+*.log
+# Do not copy local runtime state of openclaw
+openclaw-config/logs
+openclaw-config/workspace/memory
+openclaw-config/workspace-attestations
+openclaw-config/sessions

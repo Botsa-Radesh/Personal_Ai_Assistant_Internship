@@ -133,19 +133,20 @@ try {
     const seedDir = "/usr/src/gbrain-seed";
     const { execSync } = await import("child_process");
 
+    // WIPE any existing cached databases to start completely fresh and clean
+    if (fs.existsSync(localDbDir)) {
+      fs.rmSync(localDbDir, { recursive: true, force: true });
+    }
+    if (fs.existsSync(persistentDbDir)) {
+      // Clean up locks folder from persistent storage to avoid stale locks
+      fs.rmSync(persistentDbDir, { recursive: true, force: true });
+    }
+
     // Create local writable tmp directory for fast db lock operations
     fs.mkdirSync(localDbDir, { recursive: true });
 
-    if (fs.existsSync(path.join(persistentDbDir, "brain.pglite"))) {
-      console.log("💾 Loading existing database from persistent volume into local cache...");
-      execSync(`cp -R ${persistentDbDir}/* ${localDbDir}/`, { stdio: "inherit" });
-    } else if (fs.existsSync(seedDir)) {
-      console.log("🌱 Database is empty. Seeding local database from repository seed...");
-      execSync(`cp -R ${seedDir}/* ${localDbDir}/`, { stdio: "inherit" });
-    } else {
-      console.log("🗄️ Database not found. Initializing fresh local database...");
-      execSync("gbrain init --pglite", { stdio: "inherit", env: { ...process.env, HOME: "/tmp" } });
-    }
+    console.log("🗄️ Initializing clean fresh local database...");
+    execSync("gbrain init --pglite", { stdio: "inherit", env: { ...process.env, HOME: "/tmp" } });
 
     // Set config.json database_path to point to /tmp to avoid filesystem locks crashing PGlite
     const localConfigPath = path.join(localDbDir, "config.json");

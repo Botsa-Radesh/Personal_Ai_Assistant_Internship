@@ -170,6 +170,9 @@ try {
     }
     fs.mkdirSync(localLocks, { recursive: true });
 
+    // Ensure all directories and files are fully readable/writable inside Docker
+    execSync(`chmod -R 777 ${localDbDir}`, { stdio: "ignore" });
+
     // Copy configurations back to the persistent volume so gbrain CLI can locate them
     await syncLocalDbToPersistent();
     console.log("✅ Database preparation complete.");
